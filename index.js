@@ -5,6 +5,8 @@ import mongoose from "mongoose";
 import product from "./model/product.js";
 import category from "./model/category.js";
 
+import { upload } from "./multer.js";
+
 dotenv.config();
 
 const app = express();
@@ -24,6 +26,10 @@ mongoose
 // 🟩 PRODUCT ROUTES
 // ============================================================
 
+
+app.use("/uploads", express.static("uploads"));
+
+
 // Get all products
 app.get("/user", async (req, res) => {
   try {
@@ -35,7 +41,7 @@ app.get("/user", async (req, res) => {
 });
 
 // Create a new product
-app.post("/user", async (req, res) => {
+app.post("/user",upload.single("image"), async (req, res) => {
   try {
     const { title, price, image,category,description } = req.body;
 
@@ -83,13 +89,44 @@ app.get("/category", async (req, res) => {
   }
 });
 
-// Create a new category
-app.post("/category", async (req, res) => {
+// Get a single product by product ID
+
+app.get("/user/products/single/:id", async (req, res) =>{
   try {
-    const newCategory = await category.create(req.body);
+    const { id } = req.params;
+    const product =await product.findById(id).populate("category");
+    
+    if (!product) {
+      return res.status(404).json({ message: "product not found"});
+    }
+    res.status(200).json(product)
+  }catch (error) {
+    console .error(error);
+    res.status(500).json({ message: "Server "})
+  }
+}) 
+
+// Create a new category
+app.post("/category", upload.single("image"), async (req, res) => {
+  try {
+    const { title } = req.body;
+    const imagePath = req.file ? req.file.path : null;
+
+    if (!title || !imagePath) {
+      return res.status(400).json({ message: "Title & image are required" });
+    }
+
+    // Convert to full URL
+    const imageUrl = `${req.protocol}://${req.get("host")}/${imagePath.replace(/\\/g, "/")}`;
+
+    const newCategory = await category.create({
+      title,
+      image: imageUrl,  // store full URL
+    });
+
     res.status(201).json({ product: newCategory });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: error.message });
   }
 });
 
