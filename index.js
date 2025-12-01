@@ -4,8 +4,10 @@ import cors from "cors";
 import mongoose from "mongoose";
 import product from "./model/product.js";
 import category from "./model/category.js";
-
 import { upload } from "./multer.js";
+import user from "./model/user.js"
+import jwt from "jsonwebtoken"
+import authMiddleware from "./middleware/auth.js"
 
 dotenv.config();
 
@@ -31,7 +33,7 @@ app.use("/uploads", express.static("uploads"));
 
 
 // Get all products
-app.get("/user", async (req, res) => {
+app.get("/products", async (req, res) => {
   try {
     const productList = await product.find();
     res.json(productList);
@@ -41,7 +43,7 @@ app.get("/user", async (req, res) => {
 });
 
 // Create a new product
-app.post("/user",upload.single("image"), async (req, res) => {
+app.post("/products",upload.single("image"), async (req, res) => {
   try {
     const { title, price, image,category,description } = req.body;
 
@@ -169,7 +171,67 @@ app.get("/products/:id", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-// ============================================================
+
+   //-------User Routes ------------
+//--------------USER REGISTRATION----------------
+app.post ("/register", async (req,res)=>{
+  try{
+    const { name, email, password } = req.body;
+    if(!name || !email || !password) {
+      return res.status(400).json({message: "all fields are required "});
+    }
+
+   //check if user exists
+   const existinguser = await user.findOne({ email });
+   if (existinguser){
+    return res.status(400).json({ message:"user already exists"});
+   }
+   //Create new user
+      const newuser = await user.create({ name, email,password   });
+      
+      res.status(201).json({message:"User created successfully", user:newUser});
+  } catch (error) {
+    console.error (error);
+    res.status(500).json({ message:"Serve error"});
+  }
+});
+
+
+
+
+//  login Routes
+app.post("/user/login",async (req, res) =>{
+   const {email,password}=req.body
+   try{
+    const usr=await user.findOne({email:email})
+    if(!usr){
+      return res.json({
+        error:"user not found"
+      })
+    }
+    if(password==usr.password){
+      let token=jwt.sign({ name:usr.name ,email:usr.email}, "scam-alert");
+
+      return res.json({
+        user:usr,
+        token:token,
+        "message":"login done!!"
+      })
+
+    }else{
+      return res.status(401).json({
+        "message":"password wrong"
+      })
+    }
+
+   }catch(err){
+    console.log(err)
+   }
+})
+app.get("/cartpage",authMiddleware,(req,res)=>{
+  console.log(req.user)
+  res.send("details about cart page",req.user)
+})
 // 🟨 START SERVER
 // ============================================================
 app.listen(PORT, () =>
