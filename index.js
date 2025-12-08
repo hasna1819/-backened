@@ -1,3 +1,4 @@
+// server.js
 import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
@@ -5,6 +6,7 @@ import mongoose from "mongoose";
 import productModel from "./model/product.js";
 import categoryModel from "./model/category.js";
 import userModel from "./model/user.js";
+import orderModel from "./model/order.js"; // ✅ import Order model
 import { upload } from "./multer.js";
 import jwt from "jsonwebtoken";
 import authMiddleware from "./middleware/auth.js";
@@ -14,12 +16,16 @@ dotenv.config();
 const app = express();
 const PORT = 8080;
 
-// Middleware
+// ==========================
+// MIDDLEWARE
+// ==========================
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static("uploads"));
 
-// Connect to MongoDB
+// ==========================
+// DATABASE CONNECTION
+// ==========================
 mongoose
   .connect(process.env.MONGO_DB)
   .then(() => console.log("✅ DATABASE CONNECTED"))
@@ -32,9 +38,10 @@ mongoose
 // Get all products
 app.get("/products", authMiddleware, async (req, res) => {
   try {
-    const productList = await productModel.find();
-    res.json(productList);
-  } catch (error) {
+    const products = await productModel.find().populate("category");
+    res.json(products);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -45,16 +52,17 @@ app.get("/user/products/single/:id", async (req, res) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid ID" });
+      return res.status(400).json({ success: false, message: "Invalid product ID" });
     }
 
-    const productItem = await productModel.findById(id);
-    if (!productItem) return res.status(404).json({ message: "Product not found" });
+    const product = await productModel.findById(id).populate("category");
 
-    res.json({ product: productItem });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+    if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+
+    res.json({ success: true, product });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -66,8 +74,9 @@ app.post("/products", upload.single("image"), async (req, res) => {
 
     const newProduct = await productModel.create({ title, price, category, description, image });
     res.status(201).json({ product: newProduct });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
   }
 });
 
@@ -80,8 +89,8 @@ app.delete("/products/:id", async (req, res) => {
     if (!deletedProduct) return res.status(404).json({ message: "Product not found" });
 
     res.status(200).json({ message: "Product deleted successfully", product: deletedProduct });
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -95,7 +104,8 @@ app.get("/category", async (req, res) => {
   try {
     const categories = await categoryModel.find();
     res.json(categories);
-  } catch (error) {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -106,13 +116,11 @@ app.get("/products/:categoryId", async (req, res) => {
     const { categoryId } = req.params;
     const products = await productModel.find({ category: categoryId }).populate("category");
 
-    if (products.length === 0) {
-      return res.status(404).json({ message: "No products found for this category" });
-    }
+    if (!products.length) return res.status(404).json({ message: "No products found for this category" });
 
     res.json(products);
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -128,11 +136,12 @@ app.post("/category", upload.single("image"), async (req, res) => {
     }
 
     const imageUrl = `${req.protocol}://${req.get("host")}/${imagePath.replace(/\\/g, "/")}`;
-
     const newCategory = await categoryModel.create({ title, image: imageUrl });
+
     res.status(201).json({ category: newCategory });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
   }
 });
 
@@ -145,9 +154,55 @@ app.delete("/category/:id", async (req, res) => {
     if (!deletedCategory) return res.status(404).json({ message: "Category not found" });
 
     res.status(200).json({ message: "Category deleted successfully", category: deletedCategory });
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ==========================
+// ORDER ROUTES
+// ==========================
+
+// Create order
+app.post("/order", async (req, res) => {
+  try {
+    const newOrder = new orderModel(req.body);
+    const savedOrder = await newOrder.save();
+    res.status(201).json(savedOrder);
+  } catch (err) {
+    console.error("Error creating order:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all orders
+app.get("/orders", async (req, res) => {
+  try {
+    const orders = await orderModel.find();
+    res.status(200).json(orders);
+  } catch (err) {
+    console.error("Error fetching orders:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get single order by ID
+app.get("/orders/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid order ID" });
+    }
+
+    const order = await orderModel.findById(id);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    res.status(200).json(order);
+  } catch (err) {
+    console.error("Error fetching order:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -159,6 +214,7 @@ app.delete("/category/:id", async (req, res) => {
 app.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
+
     if (!name || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -168,8 +224,8 @@ app.post("/register", async (req, res) => {
 
     const newUser = await userModel.create({ name, email, password });
     res.status(201).json({ message: "User created successfully", user: newUser });
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -188,8 +244,8 @@ app.post("/user/login", async (req, res) => {
     } else {
       return res.status(401).json({ message: "Incorrect password" });
     }
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -199,5 +255,7 @@ app.get("/cartpage", authMiddleware, (req, res) => {
   res.json({ message: "Cart page details", user: req.user });
 });
 
-// Start server
+// ==========================
+// START SERVER
+// ==========================
 app.listen(PORT, () => console.log(`🚀 Server running at http://localhost:${PORT}/`));
