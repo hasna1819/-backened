@@ -104,6 +104,8 @@ app.get("/category", async (req, res) => {
   try {
     const categories = await categoryModel.find();
     res.json(categories);
+    
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -167,9 +169,12 @@ app.delete("/category/:id", async (req, res) => {
 // Create order
 app.post("/order", async (req, res) => {
   try {
-    const newOrder = new orderModel(req.body);
+    const {orderId, customer ,  date ,status, total, shippingadress, product } = req.body
+  itemsnewOrder = new orderModel(req.body);
     const savedOrder = await newOrder.save();
     res.status(201).json(savedOrder);
+     const newProduct = await productModel.create({orderId, customer,date,status,total,shippingadress,product});
+     }
   } catch (err) {
     console.error("Error creating order:", err);
     res.status(500).json({ error: err.message });

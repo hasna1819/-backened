@@ -6,6 +6,8 @@ const orderSchema = new mongoose.Schema({
   date: Date,
   status: String,
   total: Number,
+  shippingadress: String ,
+  product : String,
   items: [
     {
       name: String,
